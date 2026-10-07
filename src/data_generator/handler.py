@@ -18,11 +18,8 @@ FUSO_HORARIO = ZoneInfo("America/Sao_Paulo")
 
 def obter_data_processamento(event: dict) -> date:
     """Obtém a data do evento ou usa a data atual de São Paulo."""
-    detalhe = event.get("detail", {})
-    valor = (
-        event.get("processing_date")
-        or detalhe.get("processing_date")
-    )
+    detalhe = event.get("detail") or {}
+    valor = event.get("processing_date") or detalhe.get("processing_date")
 
     if not valor:
         return datetime.now(FUSO_HORARIO).date()
@@ -36,7 +33,7 @@ def obter_data_processamento(event: dict) -> date:
 
 
 def executar(event: dict, s3_client=None) -> dict:
-    """Executa geração, conversão para Parquet e envio ao S3."""
+    """Gera os dados, converte para Parquet e envia ao S3."""
     event = event or {}
 
     bucket = os.environ.get("RAW_BUCKET")
@@ -51,7 +48,7 @@ def executar(event: dict, s3_client=None) -> dict:
     if quantidade < 1:
         raise ValueError("record_count precisa ser maior que zero")
 
-    # O mesmo identificador é usado no lote e no nome do arquivo.
+    # Cada execução gera um identificador usado no lote e no nome do arquivo.
     run_id = str(event.get("run_id") or uuid.uuid4())
 
     registros = gerar_registros(
@@ -67,10 +64,7 @@ def executar(event: dict, s3_client=None) -> dict:
         bucket=bucket,
         data_processamento=data_processamento,
         run_id=run_id,
-        prefixo_raw=os.environ.get(
-            "RAW_PREFIX",
-            "raw/fin_contabilidade_saldo_contrato",
-        ),
+        prefixo_raw=os.environ.get("RAW_PREFIX", "contratos"),
         s3_client=s3_client,
     )
 
