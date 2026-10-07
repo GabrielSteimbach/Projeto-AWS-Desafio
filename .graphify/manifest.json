@@ -1,1 +1,34 @@
-{}
+{
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/__init__.py": {
+    "mtime": 1791391060030.6924,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/data_generator/__init__.py": {
+    "mtime": 1791391084776.8887,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/data_generator/data_factory.py": {
+    "mtime": 1791391105126.407,
+    "hash": "3270d3766ae8c293bebf5996d5f80e4e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/data_generator/handler.py": {
+    "mtime": 1791390555012.1582,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/data_generator/parquet_writer.py": {
+    "mtime": 1791390555012.1582,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/src/data_generator/s3_writer.py": {
+    "mtime": 1791390555012.1582,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/tests/test_data_factory.py": {
+    "mtime": 1791391309384.5928,
+    "hash": "7342101f3a066cab9682c1dde289c06d"
+  },
+  "c:/Users/gsantste/Projeto-AWS-Desafio/tests/test_parquet_schema.py": {
+    "mtime": 1791383967983.4795,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  }
+}

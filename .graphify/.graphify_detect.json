@@ -1,20 +1,29 @@
 {
   "files": {
-    "code": [],
+    "code": [
+      "src/__init__.py",
+      "src/data_generator/__init__.py",
+      "src/data_generator/data_factory.py",
+      "src/data_generator/handler.py",
+      "src/data_generator/parquet_writer.py",
+      "src/data_generator/s3_writer.py",
+      "tests/test_data_factory.py",
+      "tests/test_parquet_schema.py"
+    ],
     "document": [],
     "paper": [],
     "image": [],
     "video": []
   },
-  "total_files": 0,
-  "total_words": 0,
+  "total_files": 8,
+  "total_words": 375,
   "needs_graph": false,
-  "warning": "Corpus is ~0 words - fits in a single context window. You may not need a graph.",
+  "warning": "Corpus is ~375 words - fits in a single context window. You may not need a graph.",
   "skipped_sensitive": [],
   "graphifyignore_patterns": 52,
   "git": {
     "source_owner": "git",
-    "source_hash": "43bc6e4d591542630d8ec23695ced22b5168701f",
+    "source_hash": "cfbb807c38f7ba06f6a11e24f3eca17d3bab9ff7",
     "branches": [
       "main"
     ],
@@ -27,9 +36,9 @@
     "source": "configured-default",
     "root": ".",
     "git_root": ".",
-    "head": "43bc6e4d591542630d8ec23695ced22b5168701f",
+    "head": "cfbb807c38f7ba06f6a11e24f3eca17d3bab9ff7",
     "candidate_count": null,
-    "included_count": 0,
+    "included_count": 8,
     "excluded_untracked_count": 0,
     "excluded_ignored_count": 0,
     "excluded_sensitive_count": 0,
