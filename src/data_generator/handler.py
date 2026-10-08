@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -14,6 +15,16 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 FUSO_HORARIO = ZoneInfo("America/Sao_Paulo")
+
+
+def registrar_log(evento: str, **campos) -> None:
+    """Registra uma mensagem JSON estruturada no CloudWatch Logs."""
+    logger.info(
+        json.dumps(
+            {"evento": evento, **campos},
+            ensure_ascii=False,
+        )
+    )
 
 
 def obter_data_processamento(event: dict) -> date:
@@ -32,54 +43,110 @@ def obter_data_processamento(event: dict) -> date:
         ) from erro
 
 
-def executar(event: dict, s3_client=None) -> dict:
+def executar(event: dict, s3_client=None, request_id=None) -> dict:
     """Gera os dados, converte para Parquet e envia ao S3."""
+    inicio = time.perf_counter()
     event = event or {}
 
-    bucket = os.environ.get("RAW_BUCKET")
-    if not bucket:
-        raise ValueError("Configure a variável de ambiente RAW_BUCKET")
+    try:
+        registrar_log(
+            "execucao_iniciada",
+            request_id=request_id,
+            tipo_evento=type(event).__name__,
+        )
 
-    data_processamento = obter_data_processamento(event)
+        if not isinstance(event, dict):
+            raise TypeError("O evento precisa ser um objeto JSON")
 
-    quantidade = int(
-        event.get("record_count", os.environ.get("RECORD_COUNT", "1000"))
-    )
-    if quantidade < 1:
-        raise ValueError("record_count precisa ser maior que zero")
+        bucket = os.environ.get("RAW_BUCKET")
+        if not bucket:
+            raise ValueError("Configure a variável de ambiente RAW_BUCKET")
 
-    # Cada execução gera um identificador usado no lote e no nome do arquivo.
-    run_id = str(event.get("run_id") or uuid.uuid4())
+        data_processamento = obter_data_processamento(event)
 
-    registros = gerar_registros(
-        quantidade=quantidade,
-        data_processamento=data_processamento,
-        id_lote=run_id,
-    )
+        quantidade = int(
+            event.get("record_count", os.environ.get("RECORD_COUNT", "1000"))
+        )
+        if quantidade < 1:
+            raise ValueError("record_count precisa ser maior que zero")
 
-    conteudo_parquet = criar_parquet(registros)
+        run_id = str(event.get("run_id") or uuid.uuid4())
 
-    uri = enviar_parquet_para_s3(
-        conteudo_parquet=conteudo_parquet,
-        bucket=bucket,
-        data_processamento=data_processamento,
-        run_id=run_id,
-        prefixo_raw=os.environ.get("RAW_PREFIX", "contratos"),
-        s3_client=s3_client,
-    )
+        registrar_log(
+            "parametros_validados",
+            request_id=request_id,
+            bucket=bucket,
+            record_count=quantidade,
+            processing_date=data_processamento.isoformat(),
+            run_id=run_id,
+        )
 
-    resultado = {
-        "status": "success",
-        "record_count": len(registros),
-        "processing_date": data_processamento.isoformat(),
-        "run_id": run_id,
-        "s3_uri": uri,
-    }
+        registrar_log(
+            "geracao_registros_iniciada",
+            record_count=quantidade,
+        )
+        registros = gerar_registros(
+            quantidade=quantidade,
+            data_processamento=data_processamento,
+            id_lote=run_id,
+        )
+        registrar_log(
+            "geracao_registros_concluida",
+            record_count=len(registros),
+        )
 
-    logger.info(json.dumps(resultado))
-    return resultado
+        registrar_log("conversao_parquet_iniciada")
+        conteudo_parquet = criar_parquet(registros)
+        registrar_log("conversao_parquet_concluida")
+
+        prefixo_raw = os.environ.get("RAW_PREFIX", "contratos")
+        registrar_log(
+            "upload_s3_iniciado",
+            bucket=bucket,
+            prefixo=prefixo_raw,
+        )
+        uri = enviar_parquet_para_s3(
+            conteudo_parquet=conteudo_parquet,
+            bucket=bucket,
+            data_processamento=data_processamento,
+            run_id=run_id,
+            prefixo_raw=prefixo_raw,
+            s3_client=s3_client,
+        )
+        registrar_log("upload_s3_concluido", s3_uri=uri)
+
+        resultado = {
+            "status": "success",
+            "record_count": len(registros),
+            "processing_date": data_processamento.isoformat(),
+            "run_id": run_id,
+            "s3_uri": uri,
+        }
+
+        registrar_log(
+            "execucao_concluida",
+            request_id=request_id,
+            duracao_ms=round((time.perf_counter() - inicio) * 1000, 2),
+            **resultado,
+        )
+        return resultado
+
+    except Exception as erro:
+        logger.exception(
+            json.dumps(
+                {
+                    "evento": "execucao_falhou",
+                    "request_id": request_id,
+                    "tipo_erro": type(erro).__name__,
+                    "duracao_ms": round((time.perf_counter() - inicio) * 1000, 2),
+                },
+                ensure_ascii=False,
+            )
+        )
+        raise
 
 
 def lambda_handler(event, context):
     """Ponto de entrada configurado na AWS Lambda."""
-    return executar(event)
+    request_id = getattr(context, "aws_request_id", None)
+    return executar(event, request_id=request_id)
