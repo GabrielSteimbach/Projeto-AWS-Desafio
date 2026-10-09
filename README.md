@@ -1,5 +1,7 @@
 # Projeto AWS — Gerador de dados de contratos
 
+
+
 Componente para gerar lançamentos financeiros sintéticos em Parquet e enviá-los ao Amazon S3. A execução é feita por uma função AWS Lambda.
 
 > Os dados são fictícios. Os códigos COSIF gerados são exemplos mock e não representam códigos oficiais.
