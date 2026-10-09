@@ -8,7 +8,17 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-_s3_client = boto3.client("s3")
+_s3_client = None
+
+
+def obter_cliente_s3():
+    """Cria o cliente S3 sob demanda e o reutiliza."""
+    global _s3_client
+
+    if _s3_client is None:
+        _s3_client = boto3.client("s3")
+
+    return _s3_client
 
 
 def enviar_parquet_para_s3(
@@ -51,7 +61,11 @@ def enviar_parquet_para_s3(
         f"part-{run_id}.parquet"
     )
 
-    cliente = s3_client or _s3_client
+    cliente = (
+        s3_client
+        if s3_client is not None
+        else obter_cliente_s3()
+    )
 
     try:
         cliente.put_object(

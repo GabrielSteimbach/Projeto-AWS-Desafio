@@ -46,3 +46,12 @@ lambda-deploy.zip
 .DS_Store
 Thumbs.db
 .graphify/
+
+# Artefatos do pytest e de cobertura
+.pytest_cache/
+.pytest_cache
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+pytestdebug.log

@@ -1,0 +1,20 @@
+ .gitignore                                         | 252 [32m+++[m[31m---------------[m
+ .graphify/.graphify_analysis.json                  |  94 [32m+++++++[m
+ .graphify/.graphify_ast.json                       | 283 [32m+++++++++++++++++++++[m
+ .graphify/.graphify_labels.json                    |  10 [32m+[m
+ .graphify/GRAPH_REPORT.md                          |  45 [32m++++[m
+ ...a90386f053eea912ad71d4dda06fafbb26c0dcdcef.json |   1 [32m+[m
+ ...a120a03fc443227ce8748776090c20f6b9c1245c62.json |   1 [32m+[m
+ ...c42dd0f70ccc284a88b2c9205a864392e57c3cb1df.json |   1 [32m+[m
+ ...f43ee03a4d7263af85ff90ebc71aa9c8826ea1881c.json |   1 [32m+[m
+ ...5e440a3a85b09573b68710d491f9e940f6d9967aaf.json |   1 [32m+[m
+ ...1447006c1e0fa0efcdd0170f55b78bb7550d223a80.json |   1 [32m+[m
+ ...7f6e278a353950059dc78cefb031be7287327afea9.json |   1 [32m+[m
+ ...3835602d8441b1d9dbcdb34051c9f679722125ad77.json |   1 [32m+[m
+ .graphify/cache/stat-index.json                    |   1 [32m+[m
+ .graphify/description-instructions/batch-000.md    |  59 [32m+++++[m
+ .graphify/graph.json                               | 275 [32m++++++++++++++++++++[m
+ .graphify/label-instructions/communities.md        |  38 [32m+++[m
+ README.md                                          | 171 [32m++++++++++++[m[31m-[m
+ requirements.txt                                   |  18 [32m++[m
+ 19 files changed, 1038 insertions(+), 216 deletions(-)
