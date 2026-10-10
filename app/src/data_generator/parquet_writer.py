@@ -6,6 +6,7 @@ SCHEMA = pa.schema([
     pa.field("id_transacao", pa.string(), nullable=False),
     pa.field("id_contrato", pa.string(), nullable=False),
     pa.field("id_conta", pa.string(), nullable=False),
+    pa.field("cnpj", pa.string(), nullable=False),
     pa.field("cod_agencia", pa.string(), nullable=False),
     pa.field("tipo_contrato", pa.string(), nullable=False),
     pa.field("tipo_lancamento", pa.string(), nullable=False),
@@ -16,6 +17,7 @@ SCHEMA = pa.schema([
     pa.field("flag_estorno", pa.bool_(), nullable=False),
     pa.field("id_lote", pa.string(), nullable=False),
 ])
+
 
 
 def criar_parquet(registros: list[dict]) -> bytes:

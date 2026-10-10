@@ -5,15 +5,16 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from src.data_generator import parquet_writer
+from src.data_generator import data_factory, parquet_writer
 
 
 def registro_valido():
     return {
         "id_transacao": "transacao-1",
-        "id_contrato": "CC-123-1",
-        "id_conta": "123",
-        "cod_agencia": "456",
+        "id_contrato": "CC-000123-1",
+        "id_conta": "000123",
+        "cnpj": data_factory.gerar_cnpjs_unicos(1)[0],
+        "cod_agencia": "0456",
         "tipo_contrato": "CC",
         "tipo_lancamento": "DEBITO",
         "valor_lancamento": Decimal("12.34"),
@@ -28,10 +29,12 @@ def registro_valido():
 def test_criar_parquet_produz_arquivo_legivel():
     conteudo = parquet_writer.criar_parquet([registro_valido()])
     tabela = pq.read_table(pa.BufferReader(conteudo))
+    registro = tabela.to_pylist()[0]
 
     assert tabela.schema.names == parquet_writer.SCHEMA.names
     assert tabela.num_rows == 1
-    assert tabela.to_pylist()[0]["id_transacao"] == "transacao-1"
+    assert registro["id_transacao"] == "transacao-1"
+    assert data_factory.validar_cnpj(registro["cnpj"])
 
 
 def test_criar_parquet_rejeita_lista_vazia():

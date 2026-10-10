@@ -6,12 +6,29 @@ import pytest
 from src.data_generator import data_factory
 
 
+def contrato_teste(id_conta="000123"):
+    return {
+        "id_conta": id_conta,
+        "cnpj": data_factory.gerar_cnpjs_unicos(1)[0],
+        "id_contrato": f"CC-{id_conta}-1",
+        "cod_agencia": "1234",
+        "tipo_contrato": "CC",
+        "cod_cosif": data_factory.COSIF_MOCK["CC"],
+    }
+
+
 def test_criar_contas_e_contratos():
     contratos = data_factory.criar_contas_e_contratos(8)
 
-    contas = {item["id_conta"] for item in contratos}
-    assert len(contas) == 8
+    assert len({item["id_conta"] for item in contratos}) == 8
+    assert len({item["cod_agencia"] for item in contratos}) == 8
+    assert len({item["cnpj"] for item in contratos}) == 8
 
+    for cnpj in {item["cnpj"] for item in contratos}:
+        assert len(cnpj) == 14
+        assert data_factory.validar_cnpj(cnpj)
+
+    contas = {item["id_conta"] for item in contratos}
     for conta in contas:
         da_conta = [
             item for item in contratos if item["id_conta"] == conta
@@ -25,31 +42,53 @@ def test_criar_contas_e_contratos():
             ]
 
 
-def test_conta_duplicada_e_ignorada(monkeypatch):
-    valores = iter([
-        "11111111", "0001",  # conta e agência
-        "11111111",          # conta duplicada
-        "22222222", "0002",  # segunda conta e agência
-    ])
+def test_quantidade_padrao_gera_mil_contas_agencias_e_cnpjs():
+    contratos = data_factory.criar_contas_e_contratos()
+
+    assert len({item["id_conta"] for item in contratos}) == 1000
+    assert len({item["cod_agencia"] for item in contratos}) == 1000
+    assert len({item["cnpj"] for item in contratos}) == 1000
+
+
+def test_cnpjs_gerados_sao_unicos_e_validos():
+    cnpjs = data_factory.gerar_cnpjs_unicos(10)
+
+    assert len(cnpjs) == 10
+    assert len(set(cnpjs)) == 10
+    assert all(data_factory.validar_cnpj(cnpj) for cnpj in cnpjs)
+
+
+def test_validar_cnpj_rejeita_valores_invalidos():
+    assert not data_factory.validar_cnpj(None)
+    assert not data_factory.validar_cnpj("cnpj-invalido")
+
+
+def test_gerador_tenta_novamente_se_a_base_do_cnpj_for_repetida(monkeypatch):
+    bases = iter(["AAAAAAAAAAAA", "ABC123DEF456"])
     monkeypatch.setattr(
-        data_factory.fake,
-        "numerify",
-        lambda text: next(valores),
+        data_factory.random,
+        "choices",
+        lambda population, k: list(next(bases)),
     )
 
-    contratos = data_factory.criar_contas_e_contratos(2)
+    cnpj = data_factory.gerar_cnpjs_unicos(1)[0]
 
-    assert len({item["id_conta"] for item in contratos}) == 2
+    assert data_factory.validar_cnpj(cnpj)
+
+
+def test_calculo_cnpj_rejeita_base_com_tamanho_invalido():
+    with pytest.raises(ValueError):
+        data_factory._calcular_digito_verificador_cnpj("X")
+
+
+@pytest.mark.parametrize("quantidade", [0, 10000])
+def test_criar_contas_rejeita_quantidade_fora_do_limite(quantidade):
+    with pytest.raises(ValueError):
+        data_factory.criar_contas_e_contratos(quantidade)
 
 
 def test_gerar_registros_com_lote_informado(monkeypatch):
-    contrato = {
-        "id_conta": "12345678",
-        "id_contrato": "CC-12345678-1",
-        "cod_agencia": "1234",
-        "tipo_contrato": "CC",
-        "cod_cosif": data_factory.COSIF_MOCK["CC"],
-    }
+    contrato = contrato_teste()
     monkeypatch.setattr(
         data_factory,
         "criar_contas_e_contratos",
@@ -67,7 +106,9 @@ def test_gerar_registros_com_lote_informado(monkeypatch):
 
     for registro in registros:
         assert registro["id_lote"] == "lote-teste"
-        assert registro["id_conta"] == "12345678"
+        assert registro["id_conta"] == "000123"
+        assert registro["cnpj"] == contrato["cnpj"]
+        assert data_factory.validar_cnpj(registro["cnpj"])
         assert registro["tipo_lancamento"] in data_factory.TIPOS_LANCAMENTO
         assert registro["dt_processamento"] == data_referencia
         assert registro["dt_lancamento"].date() <= data_referencia
@@ -78,13 +119,7 @@ def test_gerar_registros_com_lote_informado(monkeypatch):
 
 
 def test_gerar_registros_gera_id_lote_se_ausente(monkeypatch):
-    contrato = {
-        "id_conta": "12345678",
-        "id_contrato": "CC-12345678-1",
-        "cod_agencia": "1234",
-        "tipo_contrato": "CC",
-        "cod_cosif": data_factory.COSIF_MOCK["CC"],
-    }
+    contrato = contrato_teste()
     monkeypatch.setattr(
         data_factory,
         "criar_contas_e_contratos",
@@ -114,3 +149,18 @@ def test_gerar_registros_rejeita_quantidade_zero():
 def test_gerar_registros_rejeita_data_invalida(data_invalida):
     with pytest.raises(TypeError, match="datetime.date"):
         data_factory.gerar_registros(1, data_invalida)
+
+
+def test_gerar_registros_rejeita_menos_lancamentos_que_contas(monkeypatch):
+    contratos = [
+        contrato_teste("000123"),
+        contrato_teste("000456"),
+    ]
+    monkeypatch.setattr(
+        data_factory,
+        "criar_contas_e_contratos",
+        lambda: contratos,
+    )
+
+    with pytest.raises(ValueError, match="pelo menos"):
+        data_factory.gerar_registros(1, date(2026, 10, 7))
