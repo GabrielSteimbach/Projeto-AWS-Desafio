@@ -1,172 +1,99 @@
-# Projeto AWS — Gerador de dados de contratos
+<div align="center">
 
+# Pipeline de Dados Contábeis na AWS
 
+**Geração de dados sintéticos e ingestão na camada Bronze com AWS**
 
-Componente para gerar lançamentos financeiros sintéticos em Parquet e enviá-los ao Amazon S3. A execução é feita por uma função AWS Lambda.
+![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazonaws)
+![Python](https://img.shields.io/badge/Python-Lambda-blue?logo=python)
+![Apache Spark](https://img.shields.io/badge/Apache-Spark-red?logo=apachespark)
+![Escopo](https://img.shields.io/badge/escopo-Bronze-blue)
 
-> Os dados são fictícios. Os códigos COSIF gerados são exemplos mock e não representam códigos oficiais.
+</div>
 
-## Fluxo do gerador
+---
 
-1. A Lambda recebe a data de processamento e a quantidade de registros.
-2. O módulo `data_factory` gera os lançamentos sintéticos.
-3. O `parquet_writer` converte os registros para Parquet.
-4. O `s3_writer` envia o arquivo ao bucket S3.
-5. A execução e suas etapas são registradas no CloudWatch Logs.
+## Sobre o projeto
 
-## Estrutura relacionada
+Protótipo de pipeline para gerar transações sintéticas em Parquet e carregá-las na camada Bronze usando AWS Lambda, AWS Step Functions e AWS Glue.
+
+**Escopo atual:** geração dos dados e ingestão Bronze. As camadas Silver e Gold e as validações completas de qualidade de dados não fazem parte da implementação atual.
+
+## Arquitetura
+
+<div align="center">
+  <img
+    src="docs/diagramas/ProjetoAWS.jpg"
+    alt="Diagrama da arquitetura do pipeline AWS"
+    width="950"
+  />
+</div>
+
+### Fluxo de execução
 
 ```text
-src/data_generator/
-├── handler.py
-├── data_factory.py
-├── parquet_writer.py
-└── s3_writer.py
-
-infra/                 # destinada à infraestrutura Terraform
-tests/unit/            # testes unitários com pytest
+EventBridge Scheduler
+        ↓
+Step Functions — sf-aws-desafio
+        ↓
+Lambda — gerador-parquet-contratos
+        ↓
+S3 — arquivos Parquet de entrada
+        ↓
+AWS Glue — glue-job-aws
+        ↓
+S3 / Glue Data Catalog — camada Bronze em Iceberg V3
 ```text
 
-## Execução da Lambda
+O agendamento está configurado para três execuções diárias, às **09:00, 13:00 e 23:00**, no fuso `America/Sao_Paulo`. A Step Functions aguarda a geração dos arquivos pela Lambda antes de iniciar o job do Glue.
 
-A função aceita um evento com `processing_date` e `record_count`. A data também pode vir dentro de `detail`.
+## Componentes
 
-Exemplo de evento:
-
-```json
-{
-  "processing_date": "2026-10-07",
-  "record_count": 5,
-  "run_id": "teste-001"
-}
-```text
-
-`run_id` é opcional. Se não for informado, a execução gera um identificador automaticamente. Se `processing_date` não for informado, o código usa a data atual de São Paulo.
-
-### Variáveis de ambiente
-
-| Variável | Obrigatória | Padrão | Descrição |
-|---|---:|---|---|
-| `RAW_BUCKET` | Sim | — | Bucket S3 de destino |
-| `RECORD_COUNT` | Não | `1000` | Quantidade de registros quando não enviada no evento |
-| `RAW_PREFIX` | Não | `contratos` | Prefixo dos arquivos no bucket |
-
-O resultado da Lambda inclui o status, a quantidade de registros, a data de processamento, o `run_id` e a URI S3.
-
-## Dados gerados
-
-Cada lançamento segue o contrato usado pelo gerador:
-
-| Campo | Tipo |
+| Componente | Responsabilidade |
 |---|---|
-| `id_transacao` | STRING |
-| `id_contrato` | STRING |
-| `id_conta` | STRING |
-| `cod_agencia` | STRING |
-| `tipo_contrato` | STRING |
-| `tipo_lancamento` | STRING |
-| `valor_lancamento` | DECIMAL(18,2) |
-| `dt_lancamento` | TIMESTAMP |
-| `dt_processamento` | DATE |
-| `cod_cosif` | STRING, nullable |
-| `flag_estorno` | BOOLEAN |
-| `id_lote` | STRING |
+| `gerador-parquet-contratos` | Gera dados sintéticos e arquivos Parquet de entrada. |
+| `sf-aws-desafio` | Orquestra a Lambda geradora e o job do Glue. |
+| `glue-job-aws` | Lê os Parquet e grava os dados na camada Bronze. |
+| EventBridge Scheduler | Inicia a máquina de estados três vezes ao dia. |
 
-O gerador usa valores positivos para `valor_lancamento`, e as datas de lançamento são geradas até 30 dias antes da data de processamento. Os códigos COSIF são mock e devem ser substituídos ou validados contra uma tabela oficial para uso contábil.
+## Contrato e qualidade de dados
 
-## Organização no S3
+O contrato de referência inclui identificadores de transação, contrato, conta e agência; tipo de contrato e lançamento; valor; datas de lançamento e processamento; código COSIF; indicador de estorno e identificador do lote.
 
-O caminho segue o formato:
+As seguintes regras precisam ser validadas antes de considerar a camada Bronze completa:
 
-```text
-s3://<bucket>/<prefixo>/ano=YYYY/mes=MM/dia=D/part-<run_id>.parquet
-```text
+- Campos obrigatórios preenchidos.
+- `id_transacao` único.
+- `valor_lancamento > 0`.
+- `dt_lancamento <= dt_processamento`.
+- `cod_cosif` existente no domínio COSIF.
 
-Exemplo:
+A intenção é preservar os dados de origem e registrar ou encaminhar os registros inválidos, sem descartá-los silenciosamente.
 
-```text
-s3://meu-bucket/contratos/ano=2026/mes=10/dia=7/part-teste-001.parquet
-```text
+## Testes locais
 
-## Desenvolvimento local
-
-No Git Bash, na raiz do projeto:
+Com Python e as dependências do projeto instaladas:
 
 ```bash
 python -m venv .venv
-source .venv/Scripts/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
+python -m pytest app/tests -q
 ```text
 
-Para sair do ambiente virtual:
+## Configuração AWS
 
-```bash
-deactivate
-```text
+O ambiente atual utiliza a região `us-east-1`. Buckets, caminhos S3, banco e tabela do Glue Data Catalog devem ser configurados conforme o ambiente; não inclua credenciais ou chaves no código.
 
-## Testes
+A execução manual ponta a ponta foi validada. A primeira execução automática do cronograma deve ser acompanhada no EventBridge e no histórico de execuções da Step Functions.
 
-Instale as ferramentas de desenvolvimento:
+## Próximas etapas
 
-```bash
-python -m pip install pytest pytest-cov
-```text
+- Implementar e testar as regras de qualidade de dados.
+- Registrar métricas de registros aceitos e rejeitados.
+- Avaliar reprocessamento idempotente e ingestão incremental.
+- Desenvolver as camadas Silver e Gold.
+- Medir desempenho com volumes representativos antes de afirmar capacidade de produção.
 
-Execute os testes com relatório de cobertura:
+## Segurança
 
-```bash
-python -m pytest \
-  --cov=src.data_generator \
-  --cov-report=term-missing \
-  --cov-fail-under=90
-```text
-
-A meta é atingir pelo menos 90% de cobertura no pacote `src.data_generator`. O resultado só deve ser considerado confirmado depois de a suíte estar criada e o comando terminar com sucesso.
-
-Os testes unitários devem simular as chamadas ao S3; eles não devem gravar dados reais na AWS.
-
-## Implantação e dependências AWS
-
-A `.venv` local não é enviada automaticamente para a Lambda. As dependências externas, como Faker e PyArrow, precisam estar no pacote de implantação ou em layers anexadas à função.
-
-A Lambda usada neste projeto executa em Python 3.12. Dependências com componentes compilados, como PyArrow, precisam ser empacotadas para um ambiente compatível com o runtime da Lambda — não se deve presumir que um pacote instalado no Windows funcionará na AWS.
-
-A role de execução da Lambda precisa permitir a gravação no bucket S3 e a emissão de logs no CloudWatch.
-
-## Verificação dos logs
-
-No Console AWS, acesse:
-
-**Lambda → função → Monitorar → Visualizar logs do CloudWatch**
-
-O grupo de logs segue o formato:
-
-```text
-/aws/lambda/<nome-da-funcao>
-```text
-
-Entre os eventos estruturados esperados estão:
-
-- `execucao_iniciada`
-- `parametros_validados`
-- `geracao_registros_iniciada`
-- `geracao_registros_concluida`
-- `conversao_parquet_iniciada`
-- `conversao_parquet_concluida`
-- `upload_s3_iniciado`
-- `upload_s3_concluido`
-- `execucao_concluida`
-- `execucao_falhou`
-
-O CloudWatch pode exibir os horários em UTC. Para converter para o horário de Brasília, subtraia três horas.
-
-## Infraestrutura
-
-A pasta `infra/` é reservada aos arquivos Terraform. Arquivos de estado, credenciais e variáveis com valores sensíveis não devem ser versionados.
-
-## Contexto do desafio
-
-O desafio propõe uma plataforma financeira com processamento distribuído em Apache Spark executado no AWS Glue, gerenciamento de metadados pelo Glue Data Catalog e escrita em Apache Iceberg V3. Também descreve saídas Gold de saldo por contrato e conta, classificação COSIF e métricas de reconciliação.
-
-Este README descreve especificamente o componente gerador de dados. A documentação dos demais componentes deve refletir somente o que estiver implementado no repositório.
+Os arquivos de entrada devem conter somente dados sintéticos. Não publique dados pessoais ou regulatórios, credenciais, arquivos `.env` ou o PDF confidencial do desafio.
