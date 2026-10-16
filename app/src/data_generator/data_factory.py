@@ -1,8 +1,9 @@
+import csv
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 import random
 import re
-import string
 import uuid
 
 
@@ -34,94 +35,101 @@ COSIF_MOCK = {
     "SEGURO": "COSIF-MOCK-006",
 }
 
-CARACTERES_CNPJ = string.digits + string.ascii_uppercase
-QUANTIDADE_CONTAS_PADRAO = 1000
+QUANTIDADE_IDENTIDADES = 1000
+CAMINHO_IDENTIDADES = (
+    Path(__file__).resolve().parent / "data" / "identidades.csv"
+)
 
 
-def _calcular_digito_verificador_cnpj(base: str) -> str:
-    """Calcula um dígito verificador do CNPJ alfanumérico."""
-    if len(base) == 12:
-        pesos = (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2)
-    elif len(base) == 13:
-        pesos = (6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2)
-    else:
-        raise ValueError("A base do CNPJ precisa ter 12 ou 13 caracteres")
-
-    soma = sum(
-        (ord(caractere) - 48) * peso
-        for caractere, peso in zip(base, pesos)
-    )
-    resto = soma % 11
-
-    return str(0 if resto < 2 else 11 - resto)
-
-
-def validar_cnpj(cnpj: str) -> bool:
-    """Valida o formato e os dígitos verificadores do CNPJ alfanumérico."""
-    if not isinstance(cnpj, str):
-        return False
-
-    if re.fullmatch(r"[0-9A-Z]{12}[0-9]{2}", cnpj) is None:
-        return False
-
-    base = cnpj[:12]
-    primeiro_digito = _calcular_digito_verificador_cnpj(base)
-    segundo_digito = _calcular_digito_verificador_cnpj(
-        base + primeiro_digito
-    )
-
-    return cnpj == base + primeiro_digito + segundo_digito
-
-
-def gerar_cnpjs_unicos(quantidade: int) -> list[str]:
-    """Gera CNPJs alfanuméricos únicos, com dígitos verificadores."""
-    cnpjs = []
-    cnpjs_gerados = set()
-
-    while len(cnpjs) < quantidade:
-        base = "".join(random.choices(CARACTERES_CNPJ, k=12))
-
-        # Evita uma base formada pelo mesmo caractere repetido.
-        if len(set(base)) == 1:
-            continue
-
-        primeiro_digito = _calcular_digito_verificador_cnpj(base)
-        segundo_digito = _calcular_digito_verificador_cnpj(
-            base + primeiro_digito
+def carregar_identidades() -> list[dict[str, str]]:
+    """Lê e valida as identidades fixas do CSV do projeto."""
+    if not CAMINHO_IDENTIDADES.is_file():
+        raise FileNotFoundError(
+            f"Arquivo de identidades não encontrado: {CAMINHO_IDENTIDADES}"
         )
-        cnpj = base + primeiro_digito + segundo_digito
 
-        if cnpj not in cnpjs_gerados:
-            cnpjs_gerados.add(cnpj)
-            cnpjs.append(cnpj)
+    with CAMINHO_IDENTIDADES.open(
+        mode="r",
+        newline="",
+        encoding="utf-8",
+    ) as arquivo:
+        leitor = csv.DictReader(arquivo)
 
-    return cnpjs
+        colunas_esperadas = ["id_conta", "agencia", "cnpj"]
+        if leitor.fieldnames != colunas_esperadas:
+            raise ValueError(
+                f"O CSV precisa ter estas colunas: {colunas_esperadas}"
+            )
+
+        identidades = [
+            {
+                "id_conta": (linha["id_conta"] or "").strip(),
+                "agencia": (linha["agencia"] or "").strip(),
+                "cnpj": (linha["cnpj"] or "").strip().upper(),
+            }
+            for linha in leitor
+        ]
+
+    if len(identidades) != QUANTIDADE_IDENTIDADES:
+        raise ValueError(
+            f"O CSV precisa ter {QUANTIDADE_IDENTIDADES} identidades; "
+            f"foram encontradas {len(identidades)}"
+        )
+
+    tuplas = set()
+
+    for identidade in identidades:
+        if re.fullmatch(r"\d{4}", identidade["id_conta"]) is None:
+            raise ValueError(
+                f"id_conta inválido no CSV: {identidade['id_conta']}"
+            )
+
+        if re.fullmatch(r"\d{4}", identidade["agencia"]) is None:
+            raise ValueError(
+                f"Agência inválida no CSV: {identidade['agencia']}"
+            )
+
+        # Identificador fictício: nove caracteres alfanuméricos,
+        # começando com zero. Não é um CNPJ fiscal válido.
+        if re.fullmatch(r"0[A-Z0-9]{8}", identidade["cnpj"]) is None:
+            raise ValueError(
+                f"Identificador CNPJ inválido no CSV: {identidade['cnpj']}"
+            )
+
+        tupla = (
+            identidade["id_conta"],
+            identidade["agencia"],
+            identidade["cnpj"],
+        )
+
+        if tupla in tuplas:
+            raise ValueError(f"Tupla duplicada no CSV: {tupla}")
+
+        tuplas.add(tupla)
+
+    return identidades
 
 
 def criar_contas_e_contratos(
-    quantidade_contas: int = QUANTIDADE_CONTAS_PADRAO,
+    quantidade_contas: int = QUANTIDADE_IDENTIDADES,
 ) -> list[dict]:
-    """Cria contas, agências e CNPJs únicos, com três a cinco contratos por conta."""
+    """Cria contratos usando as identidades fixas do CSV."""
+    identidades = carregar_identidades()
+
     if quantidade_contas < 1:
         raise ValueError("quantidade_contas precisa ser maior que zero")
 
-    # Códigos de agência de 0001 a 9999: no máximo 9.999 únicos.
-    if quantidade_contas > 9999:
-        raise ValueError("quantidade_contas não pode exceder 9999")
-
-    numeros_conta = random.sample(range(1, 1_000_000), quantidade_contas)
-    numeros_agencia = random.sample(range(1, 10_000), quantidade_contas)
-    cnpjs = gerar_cnpjs_unicos(quantidade_contas)
+    if quantidade_contas > len(identidades):
+        raise ValueError(
+            f"quantidade_contas não pode exceder {len(identidades)}"
+        )
 
     contratos = []
 
-    for numero_conta, numero_agencia, cnpj in zip(
-        numeros_conta,
-        numeros_agencia,
-        cnpjs,
-    ):
-        id_conta = f"{numero_conta:06d}"
-        cod_agencia = f"{numero_agencia:04d}"
+    for identidade in identidades[:quantidade_contas]:
+        id_conta = identidade["id_conta"]
+        cnpj = identidade["cnpj"]
+        cod_agencia = identidade["agencia"]
 
         tipos = random.sample(
             TIPOS_CONTRATO,
@@ -146,7 +154,7 @@ def gerar_registros(
     data_processamento: date,
     id_lote: str | None = None,
 ) -> list[dict]:
-    """Gera lançamentos fictícios conforme o contrato de dados."""
+    """Gera lançamentos usando as identidades fixas do CSV."""
     if quantidade < 1:
         raise ValueError("quantidade precisa ser maior que zero")
 
@@ -177,7 +185,7 @@ def gerar_registros(
         for contratos_da_conta in contratos_por_conta.values()
     ]
 
-    # Lançamentos adicionais são distribuídos entre os contratos.
+    # Distribui os lançamentos adicionais entre os contratos.
     contratos_selecionados.extend(
         random.choice(contratos)
         for _ in range(quantidade - quantidade_contas)
