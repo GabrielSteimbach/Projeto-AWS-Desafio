@@ -22,11 +22,9 @@ Protótipo de pipeline para gerar transações sintéticas em Parquet e carregá
 ## Arquitetura
 
 <div align="center">
-  <img
-    src="docs/diagramas/ProjetoAWS.jpg"
-    alt="Diagrama da arquitetura do pipeline AWS"
-    width="950"
-  />
+ <img src="./docs/diagramas/ProjetoAWS.jpg"
+     alt="Diagrama da arquitetura do pipeline AWS"
+     width="950" />
 </div>
 
 ### Fluxo de execução
