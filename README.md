@@ -91,3 +91,67 @@ A execução manual ponta a ponta foi validada. A primeira execução automátic
 ## Segurança
 
 Os arquivos de entrada devem conter somente dados sintéticos. Não publique dados pessoais ou regulatórios, credenciais, arquivos `.env` ou o PDF confidencial do desafio.
+
+## Arquitetura e decisões técnicas
+
+O projeto implementa um pipeline batch com organização Medallion. O escopo atual cobre a geração dos dados sintéticos e a ingestão na camada Bronze; Silver e Gold são etapas futuras.
+
+A orquestração segue esta sequência:
+
+1. O EventBridge Scheduler inicia a máquina de estados três vezes ao dia.
+2. A Step Functions invoca a Lambda geradora.
+3. A Lambda cria dados sintéticos e os disponibiliza em Parquet no S3.
+4. A Step Functions inicia o job do AWS Glue e aguarda sua conclusão.
+5. O Glue processa os arquivos com Spark e grava a camada Bronze em Iceberg.
+
+A separação entre geração e processamento permite testar o produtor e o job de ingestão de forma independente. A Step Functions controla a ordem das etapas e apresenta o estado da execução.
+
+## Serviços e ferramentas
+
+| Serviço/ferramenta | Uso no projeto |
+|---|---|
+| Amazon EventBridge Scheduler | Dispara o fluxo em horários programados. |
+| AWS Step Functions | Orquestra a Lambda geradora e o job Glue em sequência. |
+| AWS Lambda | Gera dados sintéticos para testes. |
+| Amazon S3 | Armazena os arquivos Parquet de entrada e os dados da camada Bronze. |
+| AWS Glue | Executa o processamento Spark e gerencia o job de ingestão. |
+| AWS Glue Data Catalog | Mantém os metadados das tabelas, conforme configuração do ambiente. |
+| Apache Iceberg | Formato de tabela usado na camada Bronze. |
+| Terraform | Define infraestrutura nos arquivos presentes em `infra/`. |
+| Pytest | Executa os testes automatizados do projeto. |
+
+## Percurso pelo código
+
+| Arquivo/componente | Responsabilidade |
+|---|---|
+| `app/src/data_generator/data_factory.py` | Lógica de criação dos dados sintéticos. |
+| `app/lambda_function.py` | Ponto de entrada da função Lambda, se esse for o handler configurado no deploy. |
+| Definição da Step Functions | Define a sequência Lambda → Glue e o tratamento do resultado de cada etapa. |
+| Script do AWS Glue | Lê os Parquet do S3 e grava os dados na camada Bronze. |
+| `infra/main.tf` e `infra/variables.tf` | Definem recursos e parâmetros de infraestrutura presentes no Terraform. |
+| `app/tests/` | Testes automatizados da lógica de geração e de seus componentes. |
+
+## Contrato e qualidade dos dados
+
+As regras previstas para o contrato incluem:
+
+- Campos obrigatórios preenchidos.
+- `id_transacao` único.
+- `valor_lancamento > 0`.
+- `dt_lancamento <= dt_processamento`.
+- `cod_cosif` existente no domínio de referência.
+
+> Informe nesta seção quais regras já estão implementadas e quais ainda estão pendentes. Não descreva uma validação como concluída antes de testá-la.
+
+## Limitações conhecidas
+
+A execução de teste com uma amostra pequena valida o fluxo funcional, mas não demonstra capacidade para processar centenas de milhões de transações dentro do SLA do desafio. A capacidade e o custo precisam ser avaliados com testes de volume representativos.
+
+## Próximas etapas
+
+- Implementar e testar as regras de qualidade de dados.
+- Registrar métricas de registros válidos e rejeitados.
+- Definir e testar a estratégia de reprocessamento idempotente.
+- Avaliar particionamento e otimizações Spark.
+- Desenvolver as camadas Silver e Gold.
+- Medir desempenho com volumes representativos.
