@@ -22,14 +22,13 @@ Protótipo de pipeline para gerar transações sintéticas em Parquet e carregá
 ## Arquitetura
 
 <div align="center">
- <img src="./docs/diagramas/ProjetoAWS.jpg"
+ <img src="./docs/ProjetoAWS.jpg"
      alt="Diagrama da arquitetura do pipeline AWS"
      width="950" />
 </div>
 
 ### Fluxo de execução
 
-```text
 EventBridge Scheduler
         ↓
 Step Functions — sf-aws-desafio
@@ -41,7 +40,6 @@ S3 — arquivos Parquet de entrada
 AWS Glue — glue-job-aws
         ↓
 S3 / Glue Data Catalog — camada Bronze em Iceberg V3
-```text
 
 O agendamento está configurado para três execuções diárias, às **09:00, 13:00 e 23:00**, no fuso `America/Sao_Paulo`. A Step Functions aguarda a geração dos arquivos pela Lambda antes de iniciar o job do Glue.
 
@@ -72,11 +70,9 @@ A intenção é preservar os dados de origem e registrar ou encaminhar os regist
 
 Com Python e as dependências do projeto instaladas:
 
-```bash
 python -m venv .venv
 pip install -r requirements.txt
 python -m pytest app/tests -q
-```text
 
 ## Configuração AWS
 
