@@ -92,6 +92,17 @@ A execução manual ponta a ponta foi validada. A primeira execução automátic
 
 Os arquivos de entrada devem conter somente dados sintéticos. Não publique dados pessoais ou regulatórios, credenciais, arquivos `.env` ou o PDF confidencial do desafio.
 
+## Consulta da tabela Bronze no Athena
+
+A tabela `desafio_glue.fin_contabilidade_saldo_contrato_bronze` foi criada em Iceberg V3. No ambiente utilizado, o Athena retornou `Cannot read unsupported version 3` ao tentar consultá-la.
+
+Para permitir a exploração dos dados pelo Athena, foi criada a tabela auxiliar `desafio_glue.fin_contabilidade_saldo_contrato_bronze_alt`, em Iceberg V2, por meio de um job AWS Glue/Spark. A cópia foi gravada em:
+
+`s3://mockdesafio-iceberg/athena-alt/fin_contabilidade_saldo_contrato_bronze_alt/`
+
+A tabela `_alt` serve apenas para consulta no Athena e não substitui a tabela Bronze original em V3. Como é uma cópia, deve ser recriada ou atualizada quando os dados da tabela original mudarem.
+
+
 ## Arquitetura e decisões técnicas
 
 O projeto implementa um pipeline batch com organização Medallion. O escopo atual cobre a geração dos dados sintéticos e a ingestão na camada Bronze; Silver e Gold são etapas futuras.
@@ -130,6 +141,9 @@ A separação entre geração e processamento permite testar o produtor e o job 
 | Script do AWS Glue | Lê os Parquet do S3 e grava os dados na camada Bronze. |
 | `infra/main.tf` e `infra/variables.tf` | Definem recursos e parâmetros de infraestrutura presentes no Terraform. |
 | `app/tests/` | Testes automatizados da lógica de geração e de seus componentes. |
+
+## Terraform
+| Criação do Terraform para criação e destruição da arquitetura. |
 
 ## Contrato e qualidade dos dados
 
