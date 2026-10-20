@@ -15,6 +15,7 @@
 </div>
  
 ---
+
  
 ## Objetivo
  
@@ -25,12 +26,11 @@ Medallion, saldos consolidados por contrato e por conta. O projeto usa dados
 sintéticos e serve como protótipo técnico; testes pequenos não demonstram, por si
 
 só, capacidade de produção ou atendimento ao SLA do desafio.
+
  
 ## Estado do projeto
  
 | Componente | Estado |
-
-|---|---|
 
 | Ingestão Bronze | Job existente lê Parquet e grava a tabela Bronze em Iceberg V3. |
 
@@ -43,8 +43,10 @@ só, capacidade de produção ou atendimento ao SLA do desafio.
 | Gold | Planejada para uma etapa posterior. |
 
 | Terraform de ponta a ponta | Em evolução; o gerenciamento completo e a destruição segura ainda precisam ser implementados. |
+
  
 ## Arquitetura
+
  
 ### Protótipo existente
  
@@ -54,25 +56,15 @@ em S3, orquestração e processamento com AWS Glue:
  
 
 EventBridge Scheduler
-
         ↓
-
 Step Functions
-
         ↓
-
 Lambda — geração de dados sintéticos
-
         ↓
-
 S3 — arquivos Parquet de entrada
-
         ↓
-
 AWS Glue / Spark
-
         ↓
-
 S3 e Glue Data Catalog — tabela Bronze em Iceberg V3
 
  
@@ -92,17 +84,11 @@ apagar essa origem.
  
 
 S3 de origem externo
-
         ↓
-
 Glue Bronze — Iceberg V3
-
         ↓
-
 Glue Silver — Iceberg V3
-
         ↓
-
 Glue Gold — Iceberg V3 (planejada)
  
 EventBridge Scheduler → Step Functions → execução dos jobs Glue
@@ -111,6 +97,7 @@ EventBridge Scheduler → Step Functions → execução dos jobs Glue
 Os recursos existentes fora do estado Terraform não devem ser considerados
 
 gerenciados pelo Terraform até serem importados ou substituídos por recursos próprios.
+
  
 ## Camada Bronze
  
@@ -147,6 +134,7 @@ s3://mockdesafio-iceberg/athena-alt/fin_contabilidade_saldo_contrato_bronze_alt/
 Essa cópia serve apenas para consulta no Athena. Não é a tabela Bronze oficial e
 
 deve ser atualizada ou recriada quando a Bronze original mudar.
+
  
 ## Contrato e qualidade de dados
  
@@ -177,6 +165,7 @@ A presença dessas regras no contrato não significa que todas estejam implement
 Cada validação deve ser testada e documentada antes de ser marcada como concluída.
 
 Registros inválidos devem ser tratados de forma explícita, sem descarte silencioso.
+
  
 ## Infraestrutura como código
  
@@ -204,19 +193,17 @@ ser removido com seus dados na destruição, sem afetar os dados de origem. O pl
 
 destruição deve ser revisado antes da confirmação.
  
+
 ## Testes locais
  
 Com Python e as dependências do projeto instaladas:
  
-```bash
-
 python -m venv .venv
 
 pip install -r requirements.txt
 
 python -m pytest app/tests -q
 
-```text
  
 ## Segurança
  
@@ -227,6 +214,7 @@ python -m pytest app/tests -q
 - Revise os planos do Terraform antes de aplicar ou destruir recursos.
 
 - Não configure a destruição do bucket de origem como parte do ambiente descartável.
+
  
 ## Limitações conhecidas
  
