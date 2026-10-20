@@ -1,171 +1,249 @@
 <div align="center">
-
+ 
 # Pipeline de Dados Contábeis na AWS
-
-**Geração de dados sintéticos e ingestão na camada Bronze com AWS**
-
+ 
+**Pipeline batch com AWS Glue, PySpark, Apache Iceberg e Terraform**
+ 
 ![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazonaws)
-![Python](https://img.shields.io/badge/Python-Lambda-blue?logo=python)
+
+![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)
+
 ![Apache Spark](https://img.shields.io/badge/Apache-Spark-red?logo=apachespark)
-![Escopo](https://img.shields.io/badge/escopo-Bronze-blue)
 
+![Iceberg](https://img.shields.io/badge/Apache-Iceberg-blue)
+ 
 </div>
-
+ 
 ---
+ 
+## Objetivo
+ 
+Construir um pipeline para processar lançamentos contábeis e calcular, nas camadas
 
-## Sobre o projeto
+Medallion, saldos consolidados por contrato e por conta. O projeto usa dados
 
-Protótipo de pipeline para gerar transações sintéticas em Parquet e carregá-las na camada Bronze usando AWS Lambda, AWS Step Functions e AWS Glue.
+sintéticos e serve como protótipo técnico; testes pequenos não demonstram, por si
 
-**Escopo atual:** geração dos dados e ingestão Bronze. As camadas Silver e Gold e as validações completas de qualidade de dados não fazem parte da implementação atual.
+só, capacidade de produção ou atendimento ao SLA do desafio.
+ 
+## Estado do projeto
+ 
+| Componente | Estado |
 
+|---|---|
+
+| Ingestão Bronze | Job existente lê Parquet e grava a tabela Bronze em Iceberg V3. |
+
+| Consulta da Bronze no Athena | Athena não conseguiu ler a tabela V3 no ambiente testado. |
+
+| Tabela alternativa para Athena | Existe uma cópia auxiliar Iceberg V2; não substitui a Bronze V3. |
+
+| Silver | O job foi testado com sucesso; a infraestrutura e os dados de teste foram removidos. |
+
+| Gold | Planejada para uma etapa posterior. |
+
+| Terraform de ponta a ponta | Em evolução; o gerenciamento completo e a destruição segura ainda precisam ser implementados. |
+ 
 ## Arquitetura
+ 
+### Protótipo existente
+ 
+O fluxo inicialmente implementado utiliza geração de dados sintéticos, armazenamento
 
-<div align="center">
- <img src="./docs/ProjetoAWS.jpg"
-     alt="Diagrama da arquitetura do pipeline AWS"
-     width="950" />
-</div>
-
-### Fluxo de execução
+em S3, orquestração e processamento com AWS Glue:
+ 
 
 EventBridge Scheduler
+
         ↓
-Step Functions — sf-aws-desafio
+
+Step Functions
+
         ↓
-Lambda — gerador-parquet-contratos
+
+Lambda — geração de dados sintéticos
+
         ↓
+
 S3 — arquivos Parquet de entrada
+
         ↓
-AWS Glue — glue-job-aws
+
+AWS Glue / Spark
+
         ↓
-S3 / Glue Data Catalog — camada Bronze em Iceberg V3
 
-O agendamento está configurado para três execuções diárias, às **09:00, 13:00 e 23:00**, no fuso `America/Sao_Paulo`. A Step Functions aguarda a geração dos arquivos pela Lambda antes de iniciar o job do Glue.
+S3 e Glue Data Catalog — tabela Bronze em Iceberg V3
 
-## Componentes
+ 
+### Arquitetura-alvo
+ 
+A evolução planejada é gerenciar pelo Terraform os recursos próprios do projeto:
 
-| Componente | Responsabilidade |
-|---|---|
-| `gerador-parquet-contratos` | Gera dados sintéticos e arquivos Parquet de entrada. |
-| `sf-aws-desafio` | Orquestra a Lambda geradora e o job do Glue. |
-| `glue-job-aws` | Lê os Parquet e grava os dados na camada Bronze. |
-| EventBridge Scheduler | Inicia a máquina de estados três vezes ao dia. |
+bucket de saída dedicado, banco Glue, papéis e políticas IAM, scripts e jobs Glue,
 
+Step Functions, EventBridge Scheduler e monitoramento.
+ 
+O bucket de origem `s3://mockdesafio-aws/contratos/` será tratado como entrada
+
+externa e somente para leitura. A destruição do ambiente do projeto não deverá
+
+apagar essa origem.
+ 
+
+S3 de origem externo
+
+        ↓
+
+Glue Bronze — Iceberg V3
+
+        ↓
+
+Glue Silver — Iceberg V3
+
+        ↓
+
+Glue Gold — Iceberg V3 (planejada)
+ 
+EventBridge Scheduler → Step Functions → execução dos jobs Glue
+
+ 
+Os recursos existentes fora do estado Terraform não devem ser considerados
+
+gerenciados pelo Terraform até serem importados ou substituídos por recursos próprios.
+ 
+## Camada Bronze
+ 
+O job existente `glue-job-aws`:
+ 
+- Lê arquivos Parquet de `s3://mockdesafio-aws/contratos/`.
+
+- Confere a presença das colunas esperadas pelo contrato.
+
+- Acrescenta as colunas técnicas `_source_file` e `_ingested_at`.
+
+- Grava `desafio_glue.fin_contabilidade_saldo_contrato_bronze` como Iceberg V3.
+ 
+O script atual usa `createOrReplace()`. Portanto, sua execução substitui a tabela;
+
+não representa, por si só, uma ingestão incremental diária. A estratégia de
+
+reprocessamento deve ser definida antes de automatizar execuções recorrentes.
+ 
+## Compatibilidade com Athena
+ 
+No ambiente testado, o Athena retornou erro ao consultar a tabela Iceberg V3:
+
+`Iceberg format version 3 is not supported`.
+ 
+Existe uma tabela auxiliar chamada
+
+`desafio_glue.fin_contabilidade_saldo_contrato_bronze_alt`, gravada em Iceberg V2
+
+no prefixo:
+ 
+s3://mockdesafio-iceberg/athena-alt/fin_contabilidade_saldo_contrato_bronze_alt/
+
+Essa cópia serve apenas para consulta no Athena. Não é a tabela Bronze oficial e
+
+deve ser atualizada ou recriada quando a Bronze original mudar.
+ 
 ## Contrato e qualidade de dados
+ 
+O contrato de referência inclui:
+ 
+- Identificadores de transação, contrato, conta, agência e lote.
 
-O contrato de referência inclui identificadores de transação, contrato, conta e agência; tipo de contrato e lançamento; valor; datas de lançamento e processamento; código COSIF; indicador de estorno e identificador do lote.
+- Tipo de contrato e tipo de lançamento.
 
-As seguintes regras precisam ser validadas antes de considerar a camada Bronze completa:
+- Valor do lançamento e datas de lançamento e processamento.
 
+- Código COSIF e indicador de estorno.
+ 
+As regras previstas incluem:
+ 
 - Campos obrigatórios preenchidos.
-- `id_transacao` único.
-- `valor_lancamento > 0`.
+
+- `id_transacao` único globalmente.
+
+- `valor_lancamento > 0`; estornos são identificados por `flag_estorno`.
+
 - `dt_lancamento <= dt_processamento`.
-- `cod_cosif` existente no domínio COSIF.
 
-A intenção é preservar os dados de origem e registrar ou encaminhar os registros inválidos, sem descartá-los silenciosamente.
+- `cod_cosif` existente no domínio de referência.
+ 
+A presença dessas regras no contrato não significa que todas estejam implementadas.
 
+Cada validação deve ser testada e documentada antes de ser marcada como concluída.
+
+Registros inválidos devem ser tratados de forma explícita, sem descarte silencioso.
+ 
+## Infraestrutura como código
+ 
+O objetivo é que o Terraform crie e destrua os recursos próprios do ambiente de
+
+desenvolvimento. A infraestrutura-alvo inclui:
+ 
+- Bucket de dados dedicado ao projeto.
+
+- Banco Glue e configuração dos jobs.
+
+- Papéis e políticas IAM com privilégio mínimo.
+
+- Jobs Glue para as camadas implementadas.
+
+- Step Functions para orquestração.
+
+- EventBridge Scheduler para agendamento.
+
+- Logs e métricas para monitoramento.
+ 
+O bucket de entrada continuará externo. O bucket dedicado de desenvolvimento poderá
+
+ser removido com seus dados na destruição, sem afetar os dados de origem. O plano de
+
+destruição deve ser revisado antes da confirmação.
+ 
 ## Testes locais
-
+ 
 Com Python e as dependências do projeto instaladas:
+ 
+```bash
 
 python -m venv .venv
+
 pip install -r requirements.txt
+
 python -m pytest app/tests -q
 
-## Configuração AWS
-
-O ambiente atual utiliza a região `us-east-1`. Buckets, caminhos S3, banco e tabela do Glue Data Catalog devem ser configurados conforme o ambiente; não inclua credenciais ou chaves no código.
-
-A execução manual ponta a ponta foi validada. A primeira execução automática do cronograma deve ser acompanhada no EventBridge e no histórico de execuções da Step Functions.
-
-## Próximas etapas
-
-- Implementar e testar as regras de qualidade de dados.
-- Registrar métricas de registros aceitos e rejeitados.
-- Avaliar reprocessamento idempotente e ingestão incremental.
-- Desenvolver as camadas Silver e Gold.
-- Medir desempenho com volumes representativos antes de afirmar capacidade de produção.
-
+```text
+ 
 ## Segurança
+ 
+- Utilize apenas dados sintéticos nos testes.
 
-Os arquivos de entrada devem conter somente dados sintéticos. Não publique dados pessoais ou regulatórios, credenciais, arquivos `.env` ou o PDF confidencial do desafio.
+- Não inclua credenciais, chaves, arquivos `.env` ou dados pessoais no repositório.
 
-## Consulta da tabela Bronze no Athena
+- Revise os planos do Terraform antes de aplicar ou destruir recursos.
 
-A tabela `desafio_glue.fin_contabilidade_saldo_contrato_bronze` foi criada em Iceberg V3. No ambiente utilizado, o Athena retornou `Cannot read unsupported version 3` ao tentar consultá-la.
-
-Para permitir a exploração dos dados pelo Athena, foi criada a tabela auxiliar `desafio_glue.fin_contabilidade_saldo_contrato_bronze_alt`, em Iceberg V2, por meio de um job AWS Glue/Spark. A cópia foi gravada em:
-
-`s3://mockdesafio-iceberg/athena-alt/fin_contabilidade_saldo_contrato_bronze_alt/`
-
-A tabela `_alt` serve apenas para consulta no Athena e não substitui a tabela Bronze original em V3. Como é uma cópia, deve ser recriada ou atualizada quando os dados da tabela original mudarem.
-
-
-## Arquitetura e decisões técnicas
-
-O projeto implementa um pipeline batch com organização Medallion. O escopo atual cobre a geração dos dados sintéticos e a ingestão na camada Bronze; Silver e Gold são etapas futuras.
-
-A orquestração segue esta sequência:
-
-1. O EventBridge Scheduler inicia a máquina de estados três vezes ao dia.
-2. A Step Functions invoca a Lambda geradora.
-3. A Lambda cria dados sintéticos e os disponibiliza em Parquet no S3.
-4. A Step Functions inicia o job do AWS Glue e aguarda sua conclusão.
-5. O Glue processa os arquivos com Spark e grava a camada Bronze em Iceberg.
-
-A separação entre geração e processamento permite testar o produtor e o job de ingestão de forma independente. A Step Functions controla a ordem das etapas e apresenta o estado da execução.
-
-## Serviços e ferramentas
-
-| Serviço/ferramenta | Uso no projeto |
-|---|---|
-| Amazon EventBridge Scheduler | Dispara o fluxo em horários programados. |
-| AWS Step Functions | Orquestra a Lambda geradora e o job Glue em sequência. |
-| AWS Lambda | Gera dados sintéticos para testes. |
-| Amazon S3 | Armazena os arquivos Parquet de entrada e os dados da camada Bronze. |
-| AWS Glue | Executa o processamento Spark e gerencia o job de ingestão. |
-| AWS Glue Data Catalog | Mantém os metadados das tabelas, conforme configuração do ambiente. |
-| Apache Iceberg | Formato de tabela usado na camada Bronze. |
-| Terraform | Define infraestrutura nos arquivos presentes em `infra/`. |
-| Pytest | Executa os testes automatizados do projeto. |
-
-## Percurso pelo código
-
-| Arquivo/componente | Responsabilidade |
-|---|---|
-| `app/src/data_generator/data_factory.py` | Lógica de criação dos dados sintéticos. |
-| `app/lambda_function.py` | Ponto de entrada da função Lambda, se esse for o handler configurado no deploy. |
-| Definição da Step Functions | Define a sequência Lambda → Glue e o tratamento do resultado de cada etapa. |
-| Script do AWS Glue | Lê os Parquet do S3 e grava os dados na camada Bronze. |
-| `infra/main.tf` e `infra/variables.tf` | Definem recursos e parâmetros de infraestrutura presentes no Terraform. |
-| `app/tests/` | Testes automatizados da lógica de geração e de seus componentes. |
-
-## Terraform
-| Criação do Terraform para criação e destruição da arquitetura. |
-
-## Contrato e qualidade dos dados
-
-As regras previstas para o contrato incluem:
-
-- Campos obrigatórios preenchidos.
-- `id_transacao` único.
-- `valor_lancamento > 0`.
-- `dt_lancamento <= dt_processamento`.
-- `cod_cosif` existente no domínio de referência.
-
-> Informe nesta seção quais regras já estão implementadas e quais ainda estão pendentes. Não descreva uma validação como concluída antes de testá-la.
-
+- Não configure a destruição do bucket de origem como parte do ambiente descartável.
+ 
 ## Limitações conhecidas
+ 
+- O job Bronze existente faz uma leitura ampla da origem e substitui a tabela.
 
-A execução de teste com uma amostra pequena valida o fluxo funcional, mas não demonstra capacidade para processar centenas de milhões de transações dentro do SLA do desafio. A capacidade e o custo precisam ser avaliados com testes de volume representativos.
+  A ingestão incremental e o reprocessamento idempotente ainda precisam ser definidos.
 
-## Próximas etapas
+- O Athena do ambiente testado não lê a tabela Iceberg V3; a tabela `_alt` é uma
 
-- Implementar e testar as regras de qualidade de dados.
-- Registrar métricas de registros válidos e rejeitados.
-- Definir e testar a estratégia de reprocessamento idempotente.
-- Avaliar particionamento e otimizações Spark.
-- Desenvolver as camadas Silver e Gold.
-- Medir desempenho com volumes representativos.
+  cópia V2 para consulta.
+
+- A execução com amostras pequenas não comprova o SLA nem a capacidade necessária
+
+  para centenas de milhões de transações.
+
+- Silver foi validada em um teste, mas seus recursos e dados de teste foram removidos.
+
+- Gold ainda não foi implementada.
+
+ 
